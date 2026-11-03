@@ -125,3 +125,22 @@ Extra input tokens per Converse call when going from 6 to 30 operations (tasks w
 | rest-schema (same schemas in the contract) | +1384 |
 
 Reading: the system prompt and toolConfig are both re-sent on every stateless Converse call, so neither arm reads its description "once". With the same JSON schemas, REST costs as much as MCP per call (slightly more, because of the added paths and HTTP notes). The 35% gap in results-large.json comes from the density of the description, not from protocol or placement.
+
+
+### Scenario 2 follow-up: which part of the schema buys first-call success?  (model eu.anthropic.claude-haiku-4-5-20251001-v1:0, 6 trials, run 2026-11-03)
+
+Suggested in the dev.to comments. The terse REST contract is enriched one step at a time (`strict_curve.py`): first the enum lists only, then the date format, then the full JSON schema. First-call input tokens are measured with a single Converse call per arm on the same prompt.
+
+```
+python strict_runner.py --trials 6 --ifaces mcp,rest,rest-enums,rest-enums-date,rest-schema --out results-strict-curve.json
+```
+
+| Arm | First-call input tokens | First-call success | Malformed calls | Avg round-trips | Avg total tokens |
+|---|---|---|---|---|---|
+| rest (terse) | 730 | 0% | 30 | 3.00 | 3043 |
+| rest-enums | 783 (+53) | 100% | 0 | 2.00 | 1885 |
+| rest-enums-date | 795 (+65) | 100% | 0 | 2.00 | 1905 |
+| rest-schema | 895 (+165) | 100% | 0 | 2.00 | 2103 |
+| mcp | 784 | 100% | 0 | 2.00 | 1841 |
+
+Reading: the enum values do all the work. 53 tokens of allowed values take first-call success from 0% to 100%; the date format, types and descriptions add tokens and nothing measurable on this API (the prompts already give dates as YYYY-MM-DD in most tasks). Terse contract plus enums costs the same per call as the MCP schema.

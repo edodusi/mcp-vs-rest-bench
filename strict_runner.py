@@ -19,6 +19,10 @@ from botocore.config import Config
 
 from strict_backend import StrictBackend
 from strict_scenario import StrictMcp, StrictRest, STRICT_TASKS
+from strict_curve import StrictRestEnums, StrictRestEnumsDate, StrictRestSchema
+
+IFACES = {"mcp": StrictMcp, "rest": StrictRest, "rest-enums": StrictRestEnums,
+          "rest-enums-date": StrictRestEnumsDate, "rest-schema": StrictRestSchema}
 
 MAX_TURNS = 8
 
@@ -70,6 +74,8 @@ def run_task(client, model, iface, task):
         "bad_calls": bad,
         "first_call_ok": bool(first_call_ok),
         "total_tokens": in_tok + out_tok,
+        "input_tokens": in_tok,
+        "output_tokens": out_tok,
         "latency_ms": int((time.time() - t0) * 1000),
         "final": final_text.strip()[:200],
     }
@@ -81,18 +87,21 @@ def main():
     ap.add_argument("--model", default="eu.anthropic.claude-haiku-4-5-20251001-v1:0")
     ap.add_argument("--region", default="eu-central-1")
     ap.add_argument("--out", default="results-strict.json")
+    ap.add_argument("--ifaces", default="mcp,rest",
+                    help="Comma-separated arms: " + ", ".join(IFACES))
     args = ap.parse_args()
+    arms = [IFACES[n.strip()] for n in args.ifaces.split(",")]
     client = boto3.client("bedrock-runtime", region_name=args.region,
                           config=Config(retries={"max_attempts": 6, "mode": "adaptive"}))
     rows = []
     for trial in range(args.trials):
         for task in STRICT_TASKS:
-            for IF in (StrictMcp, StrictRest):
+            for IF in arms:
                 iface = IF(StrictBackend())
                 r = run_task(client, args.model, iface, task)
                 r.update({"iface": iface.name, "task": task["id"], "trial": trial})
                 rows.append(r)
-                print(f"trial {trial} {iface.name:4} {task['id']:14} ok={int(r['success'])} "
+                print(f"trial {trial} {iface.name:15} {task['id']:14} ok={int(r['success'])} "
                       f"first_ok={int(r['first_call_ok'])} bad={r['bad_calls']} "
                       f"calls={r['tool_calls']} tok={r['total_tokens']:5}", flush=True)
     json.dump({"model": args.model, "trials": args.trials, "rows": rows},
