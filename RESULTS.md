@@ -96,3 +96,32 @@
 | Avg round-trips | 2.00 | 3.00 |
 | Avg total tokens | 1841 | 3041 |
 | Median latency (ms) | 1720 | 3006 |
+
+
+### Control: REST with the MCP JSON schemas in its contract  (model eu.anthropic.claude-haiku-4-5-20251001-v1:0, 5 trials, run 2026-11-03)
+
+Suggested in the dev.to comments: if the token gap on the large surface comes from where the description sits, a REST contract carrying the same JSON schemas should stay cheap. If it comes from the format of the description, it should land next to MCP. `rest-schema` (`iface_rest_schema.py`) is the REST arm with every tool's exact name, description and inputSchema pasted into the contract, plus method and path. All three arms ran in the same session.
+
+```
+python runner.py --trials 5 --catalog 0  --ifaces mcp,rest,rest-schema --out results-3arm-small.json
+python runner.py --trials 5 --catalog 24 --ifaces mcp,rest,rest-schema --out results-3arm-large.json
+```
+
+| Surface | Arm | Success | Avg input tokens | Avg total tokens | Avg round-trips | 304s |
+|---|---|---|---|---|---|---|
+| 6 ops | mcp | 100% | 2705 | 2840 | 2.50 | 0 |
+| 6 ops | rest | 100% | 2692 | 2866 | 2.50 | 5 |
+| 6 ops | rest-schema | 100% | 3550 | 3724 | 2.50 | 5 |
+| 30 ops | mcp | 100% | 6406 | 6558 | 2.67 | 0 |
+| 30 ops | rest | 100% | 4038 | 4223 | 2.67 | 5 |
+| 30 ops | rest-schema | 100% | 7542 | 7745 | 2.67 | 5 |
+
+Extra input tokens per Converse call when going from 6 to 30 operations (tasks whose turn count did not change, identical across those five tasks):
+
+| Arm | Extra tokens per call |
+|---|---|
+| rest (terse contract lines) | +422 |
+| mcp (native tool schemas) | +1307 |
+| rest-schema (same schemas in the contract) | +1384 |
+
+Reading: the system prompt and toolConfig are both re-sent on every stateless Converse call, so neither arm reads its description "once". With the same JSON schemas, REST costs as much as MCP per call (slightly more, because of the added paths and HTTP notes). The 35% gap in results-large.json comes from the density of the description, not from protocol or placement.

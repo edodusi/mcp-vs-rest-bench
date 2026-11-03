@@ -21,7 +21,10 @@ from botocore.config import Config
 from backend import Backend
 from iface_mcp import McpInterface
 from iface_rest import RestInterface
+from iface_rest_schema import RestSchemaInterface
 from tasks import TASKS
+
+IFACES = {"mcp": McpInterface, "rest": RestInterface, "rest-schema": RestSchemaInterface}
 
 MAX_TURNS = 8
 
@@ -93,7 +96,10 @@ def main():
     ap.add_argument("--out", default="results.json")
     ap.add_argument("--catalog", type=int, default=0,
                     help="Extra API surface size: MCP adds N tool schemas, REST adds N contract lines (one tool).")
+    ap.add_argument("--ifaces", default="mcp,rest",
+                    help="Comma-separated arms: mcp, rest, rest-schema (REST with the MCP JSON schemas in its contract).")
     args = ap.parse_args()
+    arms = [IFACES[n.strip()] for n in args.ifaces.split(",")]
 
     client = boto3.client("bedrock-runtime", region_name=args.region,
                           config=Config(retries={"max_attempts": 6, "mode": "adaptive"}))
@@ -101,14 +107,14 @@ def main():
     rows = []
     for trial in range(args.trials):
         for task in TASKS:
-            for IF in (McpInterface, RestInterface):
+            for IF in arms:
                 backend = Backend()
                 iface = IF(backend, catalog_size=args.catalog)
                 r = run_task(client, args.model, iface, task)
                 r.update({"iface": iface.name, "task": task["id"], "trial": trial,
                           "catalog": args.catalog})
                 rows.append(r)
-                print(f"trial {trial} {iface.name:4} {task['id']:16} "
+                print(f"trial {trial} {iface.name:11} {task['id']:16} "
                       f"ok={int(r['success'])} turns={r['turns']} "
                       f"tok={r['total_tokens']:5} ms={r['latency_ms']:5} "
                       f"calls={r['tool_calls']} cache={r['cache_hits']}",
